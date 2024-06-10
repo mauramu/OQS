@@ -43,7 +43,8 @@ def n_distribution(T, omega):
 def expectation_value(rho, operator):
     return np.trace(rho @ operator)
 
-# %%
+
+# %% two level rabi oscillations
 # sz = np.array([[1, 0], [0, -1]])
 sm = np.array([[0, 0, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 1, 0]])
 # sm = np.array([[0, 0], [1, 0]])
@@ -51,7 +52,7 @@ sp = np.conj(sm).T
 a = np.array([[0, 0, 1, 0], [0, 0, 0, 1], [0, 0, 0, 0], [0, 0, 0, 0]])
 # a = np.array([[0, 0], [1, 0]])
 adag = np.conj(a).T
-# %%
+
 omega_c = 1.0 * 2 * np.pi  # cavity frequency
 omega_a = 1.0 * 2 * np.pi  # atom frequency
 g_weak = 0.05 * 2 * np.pi  # coupling strength
@@ -95,7 +96,6 @@ for i in range(1, len(time)):
     solution[i] = runge_kutta_step(lambda rho: master_equation(rho, H, c_op_list, c_op_dag_list), solution[i - 1],
                                    timestep)
 
-
 fig, ax = plt.subplots(1, 1)
 # ax.plot(time, np.real(solution[:, 0, 0]), label=r'$\rho_{11}$')
 # ax.plot(time, np.real(solution[:, 1, 1]), label=r'$\rho_{22}$')
@@ -106,50 +106,49 @@ ax.plot(time, [expectation_value(rho, sp @ sm) for rho in solution], label=r'$\l
 ax.legend()
 plt.show()
 
-# %%
-import matplotlib.pyplot as plt
-import numpy as np
-from qutip import (about, basis, brmesolve, destroy, identity, ket2dm, mesolve,
-                   plot_energy_levels, plot_expectation_values, tensor)
+# %% three level atom
+# Levels
+a_state = np.array([[1], [0], [0]])
+b_state = np.array([[0], [1], [0]])
+c_state = np.array([[0], [0], [1]])
 
-N = 10  # num. cavity modes
+# lambda model
+# sigma_ab = a_state @ b_state.conj().T
+# sigma_cb = c_state @ b_state.conj().T
 
-# operators
-a = tensor(destroy(N), identity(2))
-sm = tensor(identity(N), destroy(2))
+# linear model
+sigma_cb = b_state @ c_state.conj().T
+sigma_ab = a_state @ b_state.conj().T
 
-# expectation operators
-e_ops = [a.dag() * a, sm.dag() * sm]
+times = np.arange(0.0, 15.0, timestep)
+Omega_1 = 1.0
+Omega_2 = 1.0  # Drive
+gamma_cb = 0.1
+gamma_ba = 1  # Dissipation
 
-# initial state
-psi0 = ket2dm(tensor(basis(N, 1), basis(2, 0)))
+# Hamiltonian
+H = Omega_1 * (sigma_ab + sigma_ab.conj().T) + Omega_2 * (sigma_cb + sigma_cb.conj().T)
 
-w0 = 1.0 * 2 * np.pi
-g_weak = 0.1 * 2 * np.pi
-g_strong = 0.75 * 2 * np.pi
-kappa = 0.05
+# Collapse operators (dissipation)
+c_ops1 = [gamma_cb * sigma_cb, gamma_ba * sigma_ab]
+c_ops1_dag = [gamma_cb * sigma_cb.conj().T, gamma_ba * sigma_ab.conj().T]
 
-# collapse operators (for mesolve)
-c_ops = [np.sqrt(kappa) * a]
+# Initial state
+psi0 = a_state
+rho0 = psi0 @ psi0.conj().T  # density matrix
+sol = np.zeros((len(times), *np.shape(rho0)), dtype=complex)
+sol[0] = rho0
 
-# Hamiltonians
-H_no = w0 * a.dag() * a + w0 * sm.dag() * sm
-H_weak = w0 * a.dag() * a + w0 * sm.dag() * sm + \
-         g_weak * (a + a.dag()) * (sm + sm.dag())
-H_strong = w0 * a.dag() * a + w0 * sm.dag() * sm + \
-           g_strong * (a + a.dag()) * (sm + sm.dag())
+for i in range(1, len(times)):
+    sol[i] = runge_kutta_step(lambda rho: master_equation(rho, H, c_ops1, c_ops1_dag), sol[i - 1],
+                              timestep)
 
-# times for simulation
-times = np.linspace(0, 10 * 2 * np.pi / g_strong, 1000)
-# simulation
-result_me_strong = mesolve(H_strong, psi0, times, c_ops, e_ops)
-fig, axes = plot_expectation_values(
-    [result_me_strong], ylabels=["<n_cav>", "<n_atom>"]
-)
-for ax in axes:
-    ax.legend(['mesolve'], loc='upper right')
-
-plot_energy_levels([H_no, H_weak, H_strong],
-                   h_labels=["no coupling", "weak", "strong"]);
-
+fig, ax = plt.subplots(1, 1)
+ax.plot(times, [expectation_value(rho, a_state @ a_state.conj().T) for rho in sol],
+        label=r'$\langle a^\dagger a \rangle$')
+ax.plot(times, [expectation_value(rho, b_state @ b_state.conj().T) for rho in sol],
+        label=r'$\langle b^\dagger b \rangle$')
+ax.plot(times, [expectation_value(rho, c_state @ c_state.conj().T) for rho in sol],
+        label=r'$\langle c^\dagger c \rangle$')
+ax.legend()
 plt.show()
