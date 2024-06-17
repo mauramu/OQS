@@ -1,4 +1,4 @@
-# Rabi-Oscillations
+# Open quantum systems
 
 
 
